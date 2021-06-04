@@ -5,7 +5,9 @@
 #include "memory/heap/kheap.h"
 #include "memory/paging/paging.h"
 #include "memory/memory.h"
+#include "keyboard/keyboard.h"
 #include "string/string.h"
+#include "isr80h/isr80h.h"
 #include "task/task.h"
 #include "task/process.h"
 #include "fs/file.h"
@@ -81,6 +83,12 @@ void panic(const char *msg)
     }
 }
 
+void kernel_page()
+{
+    kernel_registers();
+    paging_switch(kernel_chunk);
+}
+
 struct tss tss;
 struct gdt gdt_real[PEACHOS_TOTAL_GDT_SEGMENTS];
 struct gdt_structured gdt_structured[PEACHOS_TOTAL_GDT_SEGMENTS] = {
@@ -94,8 +102,6 @@ struct gdt_structured gdt_structured[PEACHOS_TOTAL_GDT_SEGMENTS] = {
 void kernel_main()
 {
     terminal_initialize();
-    print("Hello world!\ntest");
-
     memset(gdt_real, 0x00, sizeof(gdt_real));
     gdt_structured_to_gdt(gdt_real, gdt_structured, PEACHOS_TOTAL_GDT_SEGMENTS);
 
@@ -127,8 +133,15 @@ void kernel_main()
 
     // Switch to kernel paging chunk
     paging_switch(kernel_chunk);
+
     // Enable paging
     enable_paging();
+
+    // Register the kernel commands
+    isr80h_register_commands();
+
+    // Initialize all the system keyboards
+    keyboard_init();
 
     struct process *process = 0;
     int res = process_load("0:/blank.bin", &process);
